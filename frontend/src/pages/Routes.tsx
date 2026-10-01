@@ -22,12 +22,16 @@ import StatusBadge from '../components/common/StatusBadge';
 import EmptyState from '../components/common/EmptyState';
 import { usePointStore } from '../stores/pointStore';
 import { useRouteStore, type DraftSegment } from '../stores/routeStore';
+import { useOfflineStore } from '../stores/offlineStore';
 import type { RouteSegment, RouteVerdict } from '../types/route';
-import { buildVerdict, judgeSegment, CURB_FAIL, CURB_PASS } from '../utils/routeCheck';
+import { judgeSegment, CURB_FAIL, CURB_PASS } from '../utils/routeCheck';
+import { effectiveStatusMap, recalcRouteVerdict, recalcSegmentPassable } from '../utils/recalc';
 
 export default function Routes() {
   const { message } = App.useApp();
   const points = usePointStore((s) => s.points);
+  const inspections = usePointStore((s) => s.inspections);
+  const disputes = useOfflineStore((s) => s.disputes);
   const {
     segments,
     draftName,
@@ -52,6 +56,16 @@ export default function Routes() {
   const nameOf = (id: string) => points.find((p) => p.id === id)?.name ?? id;
 
   const draftVerdict = verdict ?? null;
+
+  /**
+   * 点位核验（含离线合并/裁定）完成后，相关路线的轮椅通行结论跟着重算：
+   * 已保存路线始终按最新点位生效状态 + 路段实测实时重算。
+   */
+  const statusMap = useMemo(
+    () => effectiveStatusMap(inspections, disputes),
+    [inspections, disputes],
+  );
+  const statusOf = useMemo(() => (id: string) => statusMap.get(id) ?? '未核验', [statusMap]);
 
   const handleBuild = () => {
     if (chain.length < 2) {
@@ -177,12 +191,15 @@ export default function Routes() {
     { title: '路缘高差(cm)', dataIndex: 'curbHeight', width: 120 },
     {
       title: '可轮椅通行',
-      dataIndex: 'wheelchairPassable',
       width: 120,
-      render: (v: boolean) => <StatusBadge value={v ? '可通行' : '不可通行'} kind="route" />,
+      render: (_, row) => {
+        const passable = recalcSegmentPassable(row, statusOf).passable;
+        return <StatusBadge value={passable ? '可通行' : '不可通行'} kind="route" />;
+      },
     },
   ];
 
+  /** 全线结论（按最新点位生效状态重算），按路线名分组 */
   const savedVerdicts = useMemo(() => {
     const byName = new Map<string, RouteSegment[]>();
     for (const s of segments) {
@@ -191,9 +208,9 @@ export default function Routes() {
       byName.set(s.routeName, list);
     }
     const rows: RouteVerdict[] = [];
-    byName.forEach((list, name) => rows.push(buildVerdict(name, list)));
+    byName.forEach((list, name) => rows.push(recalcRouteVerdict(name, list, statusOf)));
     return rows;
-  }, [segments]);
+  }, [segments, statusOf]);
 
   return (
     <div>

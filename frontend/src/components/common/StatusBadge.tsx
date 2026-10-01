@@ -3,7 +3,7 @@ import { Tag } from 'antd';
 export type BadgeKind = 'conclusion' | 'rectify' | 'route' | 'generic';
 
 interface StatusBadgeProps {
-  /** 结论文本：合格 / 限期整改 / 不合格 / 待整改 / 已整改 / 复发 / 可通行 / 不可通行 */
+  /** 结论文本：合格 / 限期整改 / 不合格 / 待整改 / 已整改 / 复发 / 待裁定 / 可通行 / 不可通行 */
   value: string;
   kind?: BadgeKind;
   /** 是否附带边框（默认无边框的浅色标签） */
@@ -17,9 +17,13 @@ const COLOR_MAP: Record<string, string> = {
   待整改: 'warning',
   已整改: 'success',
   复发: 'error',
+  待裁定: 'processing',
   可通行: 'success',
   不可通行: 'error',
   未核验: 'default',
+  待配对: 'default',
+  已合并: 'success',
+  已拒绝: 'error',
 };
 
 export function badgeColor(value: string): string {

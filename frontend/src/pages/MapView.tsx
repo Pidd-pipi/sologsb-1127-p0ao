@@ -6,14 +6,17 @@ import FacilityIcon from '../components/common/FacilityIcon';
 import StatusBadge from '../components/common/StatusBadge';
 import EmptyState from '../components/common/EmptyState';
 import { usePointStore } from '../stores/pointStore';
+import { useOfflineStore } from '../stores/offlineStore';
 import { useUiStore } from '../stores/uiStore';
 import { FACILITY_TYPES, type AccessPoint } from '../types/point';
+import { effectiveStatusMap } from '../utils/recalc';
 import { isOverdue } from '../utils/format';
 
 export default function MapView() {
   const points = usePointStore((s) => s.points);
   const inspections = usePointStore((s) => s.inspections);
   const rectifies = usePointStore((s) => s.rectifies);
+  const disputes = useOfflineStore((s) => s.disputes);
   const typeFilter = useUiStore((s) => s.mapFacilityFilter);
   const setTypeFilter = useUiStore((s) => s.setMapFacilityFilter);
   const [activeId, setActiveId] = useState('');
@@ -24,10 +27,13 @@ export default function MapView() {
     [points, typeFilter],
   );
 
-  const latestOf = (pointId: string) =>
-    inspections
-      .filter((i) => i.pointId === pointId)
-      .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  /** 合并后生效状态：待裁定优先，否则取最新正式结论 */
+  const statusByPoint = useMemo(
+    () => effectiveStatusMap(inspections, disputes),
+    [inspections, disputes],
+  );
+  const openDisputeOf = (pointId: string) =>
+    disputes.find((d) => d.pointId === pointId && d.status === '待裁定');
 
   const active = points.find((p) => p.id === activeId);
   const activeInspections = active
@@ -35,7 +41,7 @@ export default function MapView() {
     : [];
   const activePlans = active ? rectifies.filter((r) => r.pointId === active.id) : [];
 
-  const noteOf = (p: AccessPoint) => latestOf(p.id)?.conclusion ?? '未核验';
+  const noteOf = (p: AccessPoint) => statusByPoint.get(p.id) ?? '未核验';
 
   return (
     <div>
@@ -82,7 +88,7 @@ export default function MapView() {
                 size="small"
                 dataSource={visible}
                 renderItem={(p) => {
-                  const latest = latestOf(p.id);
+                  const status = statusByPoint.get(p.id) ?? '未核验';
                   return (
                     <List.Item
                       style={{ cursor: 'pointer' }}
@@ -90,7 +96,7 @@ export default function MapView() {
                         setActiveId(p.id);
                         setDrawerOpen(true);
                       }}
-                      actions={[<StatusBadge key="s" value={latest?.conclusion ?? '未核验'} kind="conclusion" />]}
+                      actions={[<StatusBadge key="s" value={status} kind="conclusion" />]}
                     >
                       <List.Item.Meta
                         avatar={<FacilityIcon type={p.facilityType} size={22} />}
@@ -128,6 +134,14 @@ export default function MapView() {
       >
         {active ? (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            {openDisputeOf(active.id) && (
+              <div style={{ padding: '8px 12px', background: '#e6f4ff', border: '1px solid #91caff', borderRadius: 8 }}>
+                <Tag color="processing">待裁定</Tag>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  同一时段两侧回传结论不一致，裁定前不写正式记录
+                </Typography.Text>
+              </div>
+            )}
             <Descriptions column={1} size="small" bordered>
               <Descriptions.Item label="点位编号">{active.code}</Descriptions.Item>
               <Descriptions.Item label="设施类型">

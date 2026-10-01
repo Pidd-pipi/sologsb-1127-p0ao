@@ -43,7 +43,7 @@ export default function Overview() {
     filteredPoints,
     filteredInspections,
     pendingRectifies,
-    latestByPoint,
+    statusByPoint,
     passRate,
   } = useInspectionFilter();
   const drill = useUiStore((s) => s.drill);
@@ -53,7 +53,7 @@ export default function Overview() {
     () =>
       DISTRICTS.map((d) => {
         const list = filteredPoints.filter((p) => p.district === d);
-        const pass = list.filter((p) => latestByPoint.get(p.id)?.conclusion === '合格').length;
+        const pass = list.filter((p) => statusByPoint.get(p.id) === '合格').length;
         return {
           key: d,
           name: d,
@@ -63,14 +63,14 @@ export default function Overview() {
           pending: pendingRectifies.filter((r) => list.some((p) => p.id === r.pointId)).length,
         };
       }).filter((r) => r.total > 0),
-    [filteredPoints, latestByPoint, pendingRectifies],
+    [filteredPoints, statusByPoint, pendingRectifies],
   );
 
   const typeRows = useMemo<GroupRow[]>(
     () =>
       FACILITY_TYPES.map((t) => {
         const list = filteredPoints.filter((p) => p.facilityType === t);
-        const pass = list.filter((p) => latestByPoint.get(p.id)?.conclusion === '合格').length;
+        const pass = list.filter((p) => statusByPoint.get(p.id) === '合格').length;
         return {
           key: t,
           name: t,
@@ -80,7 +80,7 @@ export default function Overview() {
           pending: pendingRectifies.filter((r) => list.some((p) => p.id === r.pointId)).length,
         };
       }).filter((r) => r.total > 0),
-    [filteredPoints, latestByPoint, pendingRectifies],
+    [filteredPoints, statusByPoint, pendingRectifies],
   );
 
   const drillPoints = useMemo(() => {
@@ -107,7 +107,9 @@ export default function Overview() {
     {
       title: '最新结论',
       width: 110,
-      render: (_, row) => <StatusBadge value={latestByPoint.get(row.id)?.conclusion ?? '未核验'} kind="conclusion" />,
+      render: (_, row) => (
+        <StatusBadge value={statusByPoint.get(row.id) ?? '未核验'} kind="conclusion" />
+      ),
     },
     {
       title: '核验次数',

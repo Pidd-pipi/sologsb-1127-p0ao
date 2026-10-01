@@ -1,9 +1,12 @@
 import { useMemo } from 'react';
 import { useUiStore, EMPTY_FILTER, type InspectionFilter } from '../stores/uiStore';
 import { usePointStore } from '../stores/pointStore';
+import { useOfflineStore } from '../stores/offlineStore';
 import type { AccessPoint } from '../types/point';
 import type { Inspection } from '../types/inspection';
 import type { RectifyPlan } from '../types/rectify';
+import type { EffectiveStatus } from '../utils/recalc';
+import { effectiveStatusMap } from '../utils/recalc';
 import { isOverdue } from '../utils/format';
 
 export interface InspectionFilterResult {
@@ -17,8 +20,10 @@ export interface InspectionFilterResult {
   /** 过滤点位上未整改的整改条目 */
   pendingRectifies: RectifyPlan[];
   pointMap: Map<string, AccessPoint>;
-  /** 每个点位最新一次核验 */
+  /** 每个点位最新一次核验（待裁定点位不覆盖该映射，生效结论看 statusByPoint） */
   latestByPoint: Map<string, Inspection>;
+  /** 每个点位合并后的生效状态：最新正式结论，或「待裁定」 */
+  statusByPoint: Map<string, EffectiveStatus>;
   /** 各单位/类型统计用：合格率 */
   passRate: number;
 }
@@ -31,6 +36,7 @@ export function useInspectionFilter(): InspectionFilterResult {
   const points = usePointStore((s) => s.points);
   const inspections = usePointStore((s) => s.inspections);
   const rectifies = usePointStore((s) => s.rectifies);
+  const disputes = useOfflineStore((s) => s.disputes);
 
   const pointMap = useMemo(() => new Map(points.map((p) => [p.id, p])), [points]);
 
@@ -67,6 +73,12 @@ export function useInspectionFilter(): InspectionFilterResult {
     return map;
   }, [inspections]);
 
+  /** 点位合并后的生效状态：待裁定优先，否则取最新正式核验结论 */
+  const statusByPoint = useMemo(
+    () => effectiveStatusMap(inspections, disputes),
+    [inspections, disputes],
+  );
+
   const pendingRectifies = useMemo(
     () =>
       rectifies
@@ -85,11 +97,11 @@ export function useInspectionFilter(): InspectionFilterResult {
     if (!total) return 0;
     let pass = 0;
     for (const p of filteredPoints) {
-      const latest = latestByPoint.get(p.id);
-      if (latest && latest.conclusion === '合格') pass += 1;
+      const status = statusByPoint.get(p.id) ?? '未核验';
+      if (status === '合格') pass += 1;
     }
     return Math.round((pass / total) * 1000) / 10;
-  }, [filteredPoints, latestByPoint]);
+  }, [filteredPoints, statusByPoint]);
 
   return {
     filter,
@@ -100,6 +112,7 @@ export function useInspectionFilter(): InspectionFilterResult {
     pendingRectifies,
     pointMap,
     latestByPoint,
+    statusByPoint,
     passRate,
   };
 }

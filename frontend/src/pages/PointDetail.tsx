@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -26,10 +27,12 @@ import StatusBadge from '../components/common/StatusBadge';
 import FacilityIcon from '../components/common/FacilityIcon';
 import EmptyState from '../components/common/EmptyState';
 import { usePointStore } from '../stores/pointStore';
+import { useOfflineStore } from '../stores/offlineStore';
 import { OCCUPIED_LEVELS, type Inspection, type OccupiedLevel } from '../types/inspection';
 import type { RectifyPlan } from '../types/rectify';
 import { judgeInspection } from '../utils/routeCheck';
 import { addDays, isOverdue, todayStr } from '../utils/format';
+import { formatCollectedAt } from '../utils/mergePacks';
 
 interface InlineInspection {
   date: string;
@@ -51,6 +54,12 @@ export default function PointDetail() {
   const loaded = usePointStore((s) => s.loaded);
   const addInspection = usePointStore((s) => s.addInspection);
   const addRectify = usePointStore((s) => s.addRectify);
+  const disputes = useOfflineStore((s) => s.disputes);
+  const loadDisputes = useOfflineStore((s) => s.load);
+
+  useEffect(() => {
+    void loadDisputes();
+  }, [loadDisputes]);
 
   const point = useMemo(() => points.find((p) => p.id === id), [points, id]);
   const history = useMemo(
@@ -60,6 +69,11 @@ export default function PointDetail() {
         .sort((a, b) => (a.date < b.date ? 1 : -1)),
     [inspections, id],
   );
+  const pointDisputes = useMemo(
+    () => disputes.filter((d) => d.pointId === id).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+    [disputes, id],
+  );
+  const openDispute = pointDisputes.find((d) => d.status === '待裁定');
   const plans = useMemo(
     () =>
       rectifies.filter((r) => r.pointId === id).sort((a, b) => (a.deadline < b.deadline ? -1 : 1)),
@@ -157,9 +171,60 @@ export default function PointDetail() {
 
   const inspectionColumns: ColumnsType<Inspection> = [
     { title: '核验日期', dataIndex: 'date', width: 120, sorter: (a, b) => (a.date < b.date ? -1 : 1) },
-    { title: '核验人', dataIndex: 'inspector', width: 130 },
-    { title: '坡度', dataIndex: 'slope', width: 80, render: (v: number) => `${v}%` },
-    { title: '净宽', dataIndex: 'clearWidth', width: 90, render: (v: number) => `${v} cm` },
+    {
+      title: '核验人',
+      dataIndex: 'inspector',
+      width: 150,
+      render: (v: string, row) =>
+        row.measures?.length ? (
+          <Space direction="vertical" size={0}>
+            {row.measures.map((m) => (
+              <Typography.Text key={m.side} style={{ fontSize: 12 }}>
+                <Tag color={m.side === 'A' ? 'blue' : 'purple'} style={{ marginInlineEnd: 4 }}>
+                  {m.side}
+                </Tag>
+                {m.inspector}
+              </Typography.Text>
+            ))}
+          </Space>
+        ) : (
+          v
+        ),
+    },
+    {
+      title: '坡度',
+      dataIndex: 'slope',
+      width: 110,
+      render: (v: number, row) =>
+        row.measures?.length ? (
+          <Space direction="vertical" size={0}>
+            {row.measures.map((m) => (
+              <Typography.Text key={m.side} style={{ fontSize: 12 }} type={m.slope === v ? undefined : 'secondary'}>
+                {m.side}：{m.slope}%
+              </Typography.Text>
+            ))}
+          </Space>
+        ) : (
+          `${v}%`
+        ),
+    },
+    {
+      title: '净宽',
+      dataIndex: 'clearWidth',
+      width: 120,
+      render: (v: number, row) =>
+        row.measures?.length ? (
+          <Space direction="vertical" size={0}>
+            {row.measures.map((m) => (
+              <Typography.Text key={m.side} style={{ fontSize: 12 }} type={m.clearWidth === v ? undefined : 'secondary'}>
+                {m.side}：{m.clearWidth}cm
+              </Typography.Text>
+            ))}
+          </Space>
+        ) : (
+          `${v} cm`
+        ),
+    },
     { title: '扶手', dataIndex: 'hasHandrail', width: 70, render: (v: boolean) => (v ? '有' : '无') },
     {
       title: '盲道',
@@ -172,7 +237,32 @@ export default function PointDetail() {
       title: '结论',
       dataIndex: 'conclusion',
       width: 110,
-      render: (v: string) => <StatusBadge value={v} kind="conclusion" />,
+      render: (v: string, row) => (
+        <Space direction="vertical" size={2}>
+          <StatusBadge value={v} kind="conclusion" />
+          {row.mergedFromDispute && (
+            <Tag color="processing" style={{ marginInlineEnd: 0 }}>
+              冲突裁定
+            </Tag>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: '采集时间（两边补录）',
+      width: 180,
+      render: (_, row) =>
+        row.measures?.length ? (
+          <Space direction="vertical" size={0}>
+            {row.measures.map((m) => (
+              <Typography.Text key={m.side} style={{ fontSize: 12 }} type="secondary">
+                {m.side}：{formatCollectedAt(m.collectedAt)}
+              </Typography.Text>
+            ))}
+          </Space>
+        ) : (
+          <Typography.Text type="secondary">—</Typography.Text>
+        ),
     },
     {
       title: '问题描述',
@@ -214,6 +304,7 @@ export default function PointDetail() {
   ];
 
   const latest = history[0];
+  const headStatus = openDispute ? '待裁定' : latest?.conclusion ?? '未核验';
 
   return (
     <div>
@@ -224,7 +315,7 @@ export default function PointDetail() {
             <h1 className="gb-page-title" data-testid="point-name">
               {point.name}
             </h1>
-            <StatusBadge value={latest?.conclusion ?? '未核验'} kind="conclusion" bordered />
+            <StatusBadge value={headStatus} kind="conclusion" bordered />
           </Space>
           <Typography.Text type="secondary">
             {point.code} · {point.district} · {point.location || '未填写所在道路或建筑'}
@@ -241,6 +332,30 @@ export default function PointDetail() {
           </Link>
         </Space>
       </div>
+
+      {openDispute && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={`${openDispute.date} 同一时段两侧回传结论不一致（${openDispute.conclusions.join(' / ')}），待督导员裁定`}
+          description={
+            <Space direction="vertical" size={2}>
+              {openDispute.measures.map((m) => (
+                <Typography.Text key={m.side} style={{ fontSize: 13 }}>
+                  <Tag color={m.side === 'A' ? 'blue' : 'purple'}>{m.side} 侧</Tag>
+                  {m.inspector} · {formatCollectedAt(m.collectedAt)} · 坡度 {m.slope}% · 净宽 {m.clearWidth}cm ·{' '}
+                  <StatusBadge value={m.conclusion} kind="conclusion" />
+                </Typography.Text>
+              ))}
+              <Typography.Text type="warning" style={{ fontSize: 13 }}>
+                裁定完成前不写正式核验记录，请前往「断网合并」页面处理。
+              </Typography.Text>
+            </Space>
+          }
+          data-testid="point-open-dispute"
+        />
+      )}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={14}>

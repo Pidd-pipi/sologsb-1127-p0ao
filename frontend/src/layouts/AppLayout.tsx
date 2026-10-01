@@ -7,10 +7,12 @@ import {
   NodeIndexOutlined,
   ToolOutlined,
   DatabaseOutlined,
+  CloudSyncOutlined,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { usePointStore } from '../stores/pointStore';
 import { useRouteStore } from '../stores/routeStore';
+import { useOfflineStore } from '../stores/offlineStore';
 
 const { Sider, Content, Header } = Layout;
 
@@ -20,20 +22,26 @@ const MENU = [
   { key: '/routes', icon: <NodeIndexOutlined />, label: '通行路线' },
   { key: '/map', icon: <EnvironmentOutlined />, label: '设施地图' },
   { key: '/rectify', icon: <ToolOutlined />, label: '整改清单' },
+  { key: '/offline', icon: <CloudSyncOutlined />, label: '断网合并' },
 ];
 
 export default function AppLayout() {
   const location = useLocation();
   const loadPoints = usePointStore((s) => s.load);
   const loadRoutes = useRouteStore((s) => s.load);
+  const loadOffline = useOfflineStore((s) => s.load);
   const pointCount = usePointStore((s) => s.points.length);
   const inspectionCount = usePointStore((s) => s.inspections.length);
+  const openDisputeCount = useOfflineStore(
+    (s) => s.disputes.filter((d) => d.status === '待裁定').length,
+  );
   const hasKey = Boolean((import.meta.env.VITE_AMAP_KEY || '').trim());
 
   useEffect(() => {
     void loadPoints();
     void loadRoutes();
-  }, [loadPoints, loadRoutes]);
+    void loadOffline();
+  }, [loadPoints, loadRoutes, loadOffline]);
 
   const selectedKey =
     MENU.map((m) => m.key)
@@ -82,6 +90,11 @@ export default function AppLayout() {
             <Tag color="cyan" data-testid="count-inspections">
               核验 {inspectionCount}
             </Tag>
+            {openDisputeCount > 0 && (
+              <Tag color="processing" data-testid="count-disputes">
+                待裁定 {openDisputeCount}
+              </Tag>
+            )}
             <Tag color={hasKey ? 'green' : 'orange'} data-testid="amap-key-tag">
               {hasKey ? '高德地图已配置' : '网格降级模式'}
             </Tag>

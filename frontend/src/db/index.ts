@@ -3,6 +3,7 @@ import type { AccessPoint } from '../types/point';
 import type { Inspection } from '../types/inspection';
 import type { RouteSegment } from '../types/route';
 import type { RectifyPlan } from '../types/rectify';
+import type { MergeDispute, OfflineInspectionPack } from '../types/offline';
 import { addDays, makeId, todayStr, toPlain } from '../utils/format';
 import { judgeInspection } from '../utils/routeCheck';
 
@@ -13,12 +14,15 @@ export const DB_NAME = 'gbaccessmap-db';
  * v1 建 points / inspections
  * v2 加 routes 表与 pointId 索引
  * v3 加 rectifies 表，并为历史不合格核验补建整改条目
+ * v4 加 offlinePacks / mergeDisputes 表，支撑断网回传包按点位合并与待裁定
  */
 class AccessMapDb extends Dexie {
   points!: Table<AccessPoint, string>;
   inspections!: Table<Inspection, string>;
   routes!: Table<RouteSegment, string>;
   rectifies!: Table<RectifyPlan, string>;
+  offlinePacks!: Table<OfflineInspectionPack, string>;
+  mergeDisputes!: Table<MergeDispute, string>;
 
   constructor() {
     super(DB_NAME);
@@ -72,6 +76,14 @@ class AccessMapDb extends Dexie {
           });
         }
       });
+    this.version(4).stores({
+      points: 'id, code, facilityType, district, name',
+      inspections: 'id, pointId, date, conclusion',
+      routes: 'id, routeName, fromPointId, toPointId, order',
+      rectifies: 'id, pointId, status, deadline',
+      offlinePacks: 'id, pointId, date, timeWindow, side, status, disputeId',
+      mergeDisputes: 'id, pointId, date, timeWindow, status',
+    });
   }
 }
 
