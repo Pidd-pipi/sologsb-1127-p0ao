@@ -28,6 +28,7 @@ import { buildVerdict, judgeSegment, CURB_FAIL, CURB_PASS } from '../utils/route
 export default function Routes() {
   const { message } = App.useApp();
   const points = usePointStore((s) => s.points);
+  const inspections = usePointStore((s) => s.inspections);
   const {
     segments,
     draftName,
@@ -190,10 +191,21 @@ export default function Routes() {
       list.push(s);
       byName.set(s.routeName, list);
     }
+    // 最新核验不合格的点位：途经这些点位的路段不可通行
+    const latestByPoint = new Map<string, (typeof inspections)[number]>();
+    for (const insp of inspections) {
+      const cur = latestByPoint.get(insp.pointId);
+      if (!cur || cur.date < insp.date) latestByPoint.set(insp.pointId, insp);
+    }
+    const blockedPointIds = new Set(
+      Array.from(latestByPoint.entries())
+        .filter(([, insp]) => insp.conclusion === '不合格')
+        .map(([pointId]) => pointId),
+    );
     const rows: RouteVerdict[] = [];
-    byName.forEach((list, name) => rows.push(buildVerdict(name, list)));
+    byName.forEach((list, name) => rows.push(buildVerdict(name, list, blockedPointIds)));
     return rows;
-  }, [segments]);
+  }, [segments, inspections]);
 
   return (
     <div>

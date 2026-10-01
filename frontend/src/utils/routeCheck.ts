@@ -70,13 +70,14 @@ export function judgeSegment(seg: Pick<RouteSegment, 'curbHeight' | 'stepCount' 
   return { passable: reasons.length === 0, reasons };
 }
 
-/** 全线判定：逐段判定后汇总 */
+/** 全线判定：逐段判定后汇总。blockedPointIds 为最新核验不合格、需整改后再评估的点位。 */
 export function buildVerdict(
   routeName: string,
   segments: Pick<
     RouteSegment,
     'curbHeight' | 'stepCount' | 'obstacleCount' | 'length' | 'order' | 'fromPointId' | 'toPointId'
   >[],
+  blockedPointIds?: Set<string>,
 ): RouteVerdict {
   const ordered = [...segments].sort((a, b) => a.order - b.order);
   const totalLength = Math.round(ordered.reduce((n, s) => n + (Number(s.length) || 0), 0) * 10) / 10;
@@ -88,6 +89,11 @@ export function buildVerdict(
     const r = judgeSegment(s);
     if (!r.passable) {
       reasons.push(`第 ${s.order} 段：${r.reasons.join('；')}`);
+    } else if (
+      blockedPointIds &&
+      (blockedPointIds.has(s.fromPointId) || blockedPointIds.has(s.toPointId))
+    ) {
+      reasons.push(`第 ${s.order} 段：途经点位最新核验不合格，需整改后再评估`);
     }
   });
   return {

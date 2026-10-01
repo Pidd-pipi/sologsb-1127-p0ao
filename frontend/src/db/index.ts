@@ -3,6 +3,11 @@ import type { AccessPoint } from '../types/point';
 import type { Inspection } from '../types/inspection';
 import type { RouteSegment } from '../types/route';
 import type { RectifyPlan } from '../types/rectify';
+import type {
+  OfflinePackage,
+  OfflinePackageItem,
+  PendingAdjudication,
+} from '../types/offlinePackage';
 import { addDays, makeId, todayStr, toPlain } from '../utils/format';
 import { judgeInspection } from '../utils/routeCheck';
 
@@ -13,12 +18,16 @@ export const DB_NAME = 'gbaccessmap-db';
  * v1 建 points / inspections
  * v2 加 routes 表与 pointId 索引
  * v3 加 rectifies 表，并为历史不合格核验补建整改条目
+ * v4 加离线回传包（offlinePackages / offlineItems）与待裁定（adjudications）表
  */
 class AccessMapDb extends Dexie {
   points!: Table<AccessPoint, string>;
   inspections!: Table<Inspection, string>;
   routes!: Table<RouteSegment, string>;
   rectifies!: Table<RectifyPlan, string>;
+  offlinePackages!: Table<OfflinePackage, string>;
+  offlineItems!: Table<OfflinePackageItem, string>;
+  adjudications!: Table<PendingAdjudication, string>;
 
   constructor() {
     super(DB_NAME);
@@ -72,6 +81,15 @@ class AccessMapDb extends Dexie {
           });
         }
       });
+    this.version(4).stores({
+      points: 'id, code, facilityType, district, name',
+      inspections: 'id, pointId, date, conclusion, *packageIds',
+      routes: 'id, routeName, fromPointId, toPointId, order',
+      rectifies: 'id, pointId, status, deadline',
+      offlinePackages: 'id, code, side, status, uploadedAt',
+      offlineItems: 'id, packageId, pointId, date',
+      adjudications: 'id, pointId, date, status',
+    });
   }
 }
 

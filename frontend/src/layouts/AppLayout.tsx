@@ -7,6 +7,7 @@ import {
   NodeIndexOutlined,
   ToolOutlined,
   DatabaseOutlined,
+  CloudSyncOutlined,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { usePointStore } from '../stores/pointStore';
@@ -20,6 +21,7 @@ const MENU = [
   { key: '/routes', icon: <NodeIndexOutlined />, label: '通行路线' },
   { key: '/map', icon: <EnvironmentOutlined />, label: '设施地图' },
   { key: '/rectify', icon: <ToolOutlined />, label: '整改清单' },
+  { key: '/offline', icon: <CloudSyncOutlined />, label: '离线回传' },
 ];
 
 export default function AppLayout() {

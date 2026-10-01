@@ -26,7 +26,7 @@ import StatusBadge from '../components/common/StatusBadge';
 import FacilityIcon from '../components/common/FacilityIcon';
 import EmptyState from '../components/common/EmptyState';
 import { usePointStore } from '../stores/pointStore';
-import { OCCUPIED_LEVELS, type Inspection, type OccupiedLevel } from '../types/inspection';
+import { OCCUPIED_LEVELS, type Inspection, type InspectionSide, type OccupiedLevel } from '../types/inspection';
 import type { RectifyPlan } from '../types/rectify';
 import { judgeInspection } from '../utils/routeCheck';
 import { addDays, isOverdue, todayStr } from '../utils/format';
@@ -157,7 +157,17 @@ export default function PointDetail() {
 
   const inspectionColumns: ColumnsType<Inspection> = [
     { title: '核验日期', dataIndex: 'date', width: 120, sorter: (a, b) => (a.date < b.date ? -1 : 1) },
-    { title: '核验人', dataIndex: 'inspector', width: 130 },
+    {
+      title: '核验人',
+      dataIndex: 'inspector',
+      width: 150,
+      render: (v: string, row) => (
+        <Space size={4} wrap>
+          {v}
+          {row.sides && row.sides.length > 1 ? <Tag color="blue">双边补录</Tag> : null}
+        </Space>
+      ),
+    },
     { title: '坡度', dataIndex: 'slope', width: 80, render: (v: number) => `${v}%` },
     { title: '净宽', dataIndex: 'clearWidth', width: 90, render: (v: number) => `${v} cm` },
     { title: '扶手', dataIndex: 'hasHandrail', width: 70, render: (v: boolean) => (v ? '有' : '无') },
@@ -181,6 +191,43 @@ export default function PointDetail() {
       render: (v: string) => v || <Typography.Text type="secondary">无</Typography.Text>,
     },
   ];
+
+  /** 双边补录明细：同一点位同一时段两边补录的坡度、净宽都留下，督导员与采集时间分别标清 */
+  const expandedInspectionRender = (row: Inspection) => {
+    if (!row.sides || row.sides.length <= 1) return null;
+    return (
+      <Table<InspectionSide>
+        rowKey={(side) => `${side.packageId}-${side.inspector}`}
+        size="small"
+        pagination={false}
+        dataSource={row.sides}
+        columns={[
+          { title: '采集方', dataIndex: 'side', width: 130 },
+          { title: '督导员', dataIndex: 'inspector', width: 130 },
+          {
+            title: '采集时间',
+            dataIndex: 'collectedAt',
+            width: 170,
+            render: (v: string) => new Date(v).toLocaleString('zh-CN'),
+          },
+          { title: '坡度', dataIndex: 'slope', width: 80, render: (v: number) => `${v}%` },
+          { title: '净宽', dataIndex: 'clearWidth', width: 90, render: (v: number) => `${v}cm` },
+          {
+            title: '结论',
+            dataIndex: 'conclusion',
+            width: 110,
+            render: (v: string) => <StatusBadge value={v} kind="conclusion" />,
+          },
+          {
+            title: '问题描述',
+            dataIndex: 'problem',
+            ellipsis: true,
+            render: (v: string) => v || <Typography.Text type="secondary">无</Typography.Text>,
+          },
+        ]}
+      />
+    );
+  };
 
   const rectifyColumns: ColumnsType<RectifyPlan> = [
     { title: '整改要求', dataIndex: 'requirement', ellipsis: true },
@@ -284,6 +331,10 @@ export default function PointDetail() {
                 pagination={{ pageSize: 5, hideOnSinglePage: true }}
                 dataSource={history}
                 columns={inspectionColumns}
+                expandable={{
+                  expandedRowRender: expandedInspectionRender,
+                  rowExpandable: (row) => Boolean(row.sides && row.sides.length > 1),
+                }}
               />
             ) : (
               <EmptyState title="暂无核验记录" description="在右侧录入实测值即可生成第一条记录" compact />
